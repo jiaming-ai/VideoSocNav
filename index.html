@@ -1,0 +1,1226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Social Navigation from Internet Videos</title>
+<meta name="description" content="Ordinary monocular walking videos become closed-loop social-navigation training environments in the policy's state space — 81.2% success in Arena and 19/20 real-robot trials.">
+<meta property="og:title" content="Learning Social Navigation from Internet Videos in the Policy State Space">
+<meta property="og:description" content="Walking videos become closed-loop training environments in the policy's state space. 81.2% success in Arena, 19/20 real-robot trials.">
+<meta property="og:image" content="assets/img/ov_replay.png">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* ---------- tokens: complete light palette on bare :root ---------- */
+:root{
+  color-scheme: light;
+  --bg:#fbfbfc; --surface:#ffffff; --surface-2:#f4f5f8;
+  --ink:#14161c; --ink-2:#3b4050; --muted:#646a7c; --rule:#e2e5ec; --rule-2:#eef0f5;
+  --accent:#1f4fd8; --accent-soft:#e8edfd;
+  /* the simulator's own legend — these are the colours in every rendered panel */
+  --trav:#1f9e3d; --obst:#d92b23; --unobs:#c5c8d0; --cam:#e0129b; --ped:#1f4fd8;
+  /* method series, identical to the paper's Fig. 4 */
+  --s-ours:#2266b8; --s-height:#c95d10; --s-attn:#8055b8; --s-crowd:#2a9d8f;
+  --good:#1a7f37; --warn:#b4690e; --bad:#c62a20;
+  --shadow:0 1px 2px rgba(18,22,34,.05), 0 8px 24px -12px rgba(18,22,34,.18);
+  --w:920px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#0f1116; --surface:#161922; --surface-2:#1d212b;
+    --ink:#f0f2f7; --ink-2:#c3c8d6; --muted:#949bad; --rule:#272c38; --rule-2:#1f242e;
+    --accent:#7aa2ff; --accent-soft:#1a2340;
+    --trav:#35c45c; --obst:#f2564c; --unobs:#555b69; --cam:#f56cc0; --ped:#7aa2ff;
+    --s-ours:#4a90e0; --s-height:#e08a45; --s-attn:#a48ae0; --s-crowd:#3fbda8;
+    --good:#43c46a; --warn:#e0a33c; --bad:#f2675c;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#0f1116; --surface:#161922; --surface-2:#1d212b;
+  --ink:#f0f2f7; --ink-2:#c3c8d6; --muted:#949bad; --rule:#272c38; --rule-2:#1f242e;
+  --accent:#7aa2ff; --accent-soft:#1a2340;
+  --trav:#35c45c; --obst:#f2564c; --unobs:#555b69; --cam:#f56cc0; --ped:#7aa2ff;
+  --s-ours:#4a90e0; --s-height:#e08a45; --s-attn:#a48ae0; --s-crowd:#3fbda8;
+  --good:#43c46a; --warn:#e0a33c; --bad:#f2675c;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+
+/* ---------- base ---------- */
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size:17px; line-height:1.72; letter-spacing:-.003em;
+  -webkit-font-smoothing:antialiased;
+}
+img,video{max-width:100%; display:block}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline; text-underline-offset:3px}
+:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:3px}
+
+/* ---------- layout: a single column width, text and figures alike ---------- */
+.masthead, section{
+  max-width: var(--w); margin-inline:auto; padding-inline:20px;
+}
+.wide, .full{width:100%}
+
+section{padding-block:clamp(40px,6vw,76px)}
+section + section{border-top:1px solid var(--rule-2)}
+
+/* ---------- type ---------- */
+h1,h2,h3{font-family:"Newsreader", Georgia, "Times New Roman", serif; font-weight:500; text-wrap:balance; letter-spacing:-.012em}
+h1{font-size:clamp(2.1rem,5.2vw,3.3rem); line-height:1.12; margin:0 0 .5em}
+h2{font-size:clamp(1.55rem,3.4vw,2.15rem); line-height:1.2; margin:0 0 .35em}
+h3{font-size:1.16rem; line-height:1.3; margin:2.2em 0 .5em; font-weight:600}
+p, ul, ol{max-width:76ch}
+p{margin:0 0 1.05em}
+.lede{font-size:1.12rem; color:var(--ink-2); line-height:1.6}
+.eyebrow{
+  font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.7rem; font-weight:500;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:0 0 .9em;
+}
+.dek{color:var(--muted); font-size:.99rem; margin:-.1em 0 2em; max-width:72ch}
+strong{font-weight:600; color:var(--ink)}
+.num{font-family:"IBM Plex Mono", ui-monospace, monospace; font-variant-numeric:tabular-nums}
+
+/* ---------- header ---------- */
+.masthead{padding-block:clamp(44px,7vw,78px) clamp(28px,4vw,44px)}
+.links{display:flex; flex-wrap:wrap; gap:9px; margin:1.4em 0 .6em; padding:0; list-style:none}
+.links a{
+  display:inline-flex; align-items:center; gap:.5em;
+  border:1px solid var(--rule); background:var(--surface); color:var(--ink);
+  border-radius:8px; padding:.5em .95em; font-size:.9rem; font-weight:500;
+  box-shadow:var(--shadow); transition:border-color .15s, transform .15s;
+}
+.links a:hover{text-decoration:none; border-color:var(--accent); transform:translateY(-1px)}
+.links a[aria-disabled="true"]{opacity:.55; pointer-events:none; box-shadow:none}
+.links svg{width:15px; height:15px; flex:none}
+.ovideo{width:100%; aspect-ratio:4/3; border-radius:10px; border:1px solid var(--rule); background:#000}
+
+
+/* ---------- figures ---------- */
+figure{margin:2.2em 0}
+figcaption{font-size:.87rem; color:var(--muted); line-height:1.55; margin-top:.85em; max-width:80ch}
+figcaption b{color:var(--ink-2); font-weight:600}
+.frame{border:1px solid var(--rule); border-radius:10px; overflow:hidden; background:var(--surface)}
+.plain img{border-radius:8px; border:1px solid var(--rule)}
+
+/* the simulator legend, reused wherever a rendered panel appears */
+.legend{display:flex; flex-wrap:wrap; gap:.55em 1.1em; font-size:.79rem; color:var(--muted); margin-top:.8em;
+  font-family:"IBM Plex Mono",monospace}
+.legend span{display:inline-flex; align-items:center; gap:.42em}
+.legend i{width:10px; height:10px; border-radius:2px; display:inline-block; flex:none}
+.legend i.dot{border-radius:50%}
+.legend .ln{width:14px; height:2px; border-radius:1px}
+
+/* ---------- the two routes (Fig. 1), aligned row by row ---------- */
+.routes{
+  display:grid; grid-template-columns:max-content 1fr 1fr; gap:1px;
+  background:var(--rule); border:1px solid var(--rule); border-radius:12px; overflow:hidden;
+}
+.routes > *{background:var(--surface); padding:12px 14px}
+.routes .rh{display:flex; flex-direction:column; justify-content:flex-end; gap:.15em}
+.routes .rh h4{margin:0; font-size:.98rem; font-weight:600; font-family:"IBM Plex Sans",sans-serif}
+.routes .rh .cost{font-family:"IBM Plex Mono",monospace; font-size:.73rem; color:var(--muted); margin:0}
+.routes .ours-col{background:color-mix(in srgb, var(--accent-soft) 55%, var(--surface))}
+.routes .ours-col h4{color:var(--accent)}
+.routes .ours-col .cost{color:var(--accent)}
+.rowlab{
+  display:flex; align-items:center; font-family:"IBM Plex Mono",monospace; font-size:.7rem;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--muted); white-space:nowrap;
+  background:var(--surface-2)!important;
+}
+.cell{display:flex; flex-direction:column; gap:.5em; justify-content:center}
+.cell img{border-radius:6px; border:1px solid var(--rule); width:100%}
+.cell .note{font-size:.8rem; color:var(--muted); line-height:1.45; margin:0}
+.cell .pair{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+.cell .pair figcaption{margin-top:.3em; font-size:.68rem; font-family:"IBM Plex Mono",monospace}
+.tokrow{display:flex; flex-wrap:wrap; gap:4px}
+.tok{font-family:"IBM Plex Mono",monospace; font-size:.7rem; border:1px solid var(--rule);
+  background:var(--surface-2); color:var(--ink-2); border-radius:4px; padding:.18em .45em}
+.tok.n{color:var(--muted)}
+@media (max-width:720px){
+  .routes{grid-template-columns:1fr 1fr}
+  .rowlab{grid-column:1 / -1; padding:.5em 14px}
+}
+
+/* ---------- pipeline (Fig. 2) ---------- */
+.stages{display:grid; grid-template-columns:repeat(auto-fit,minmax(245px,1fr)); gap:12px; align-items:stretch}
+@media (max-width:520px){ .stages{grid-template-columns:1fr} }
+.stage{border:1px solid var(--rule); border-radius:10px; background:var(--surface); padding:12px; height:100%}
+.stage h4{margin:0 0 .7em; font-size:.83rem; font-weight:600; font-family:"IBM Plex Sans",sans-serif; display:flex; gap:.5em; align-items:baseline}
+.stage h4 em{font-family:"IBM Plex Mono",monospace; font-style:normal; color:var(--accent); font-size:.78rem}
+.stage .imgs{display:grid; gap:5px}
+.stage img{border-radius:5px; border:1px solid var(--rule-2)}
+.stage p{font-size:.8rem; color:var(--muted); margin:.7em 0 0; line-height:1.5}
+
+/* ---------- tables ---------- */
+.tbl-wrap{overflow-x:auto; margin:1.6em 0; border:1px solid var(--rule); border-radius:10px; background:var(--surface)}
+table{border-collapse:collapse; width:100%; font-size:.88rem}
+caption{text-align:left; font-size:.87rem; color:var(--muted); padding:.9em 1em .2em; caption-side:top; line-height:1.5}
+th,td{padding:.55em .85em; text-align:right; border-bottom:1px solid var(--rule-2); white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{
+  font-family:"IBM Plex Mono",monospace; font-size:.73rem; font-weight:500; color:var(--muted);
+  letter-spacing:.03em; border-bottom:1px solid var(--rule); background:var(--surface-2);
+  position:sticky; top:0;
+}
+tbody td{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
+tbody td:first-child{font-family:"IBM Plex Sans",sans-serif}
+tbody tr:last-child td{border-bottom:none}
+table.dense{font-size:.79rem}
+table.dense th, table.dense td{padding:.45em .45em}
+table.dense td .ci{font-size:.76em; margin-left:.25em}
+tr.is-ours td{background:var(--accent-soft); font-weight:600}
+tr.is-ours td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+tr.grp td{background:var(--surface-2); color:var(--muted); font-size:.79rem;
+  font-family:"IBM Plex Mono",monospace; letter-spacing:.03em; text-align:left}
+td .ci{color:var(--muted); font-size:.8em; margin-left:.35em}
+th.lft,td.lft{text-align:left; font-family:"IBM Plex Sans",sans-serif}
+td.wrap-cell{white-space:normal; min-width:16ch}
+.best{color:var(--ink); font-weight:600}
+
+/* ---------- charts ---------- */
+.chart{background:var(--surface); border:1px solid var(--rule); border-radius:10px; padding:16px 14px 10px}
+.chart svg{width:100%; height:auto; display:block; overflow:visible}
+.ch-legend{display:flex; flex-wrap:wrap; gap:.5em 1.2em; font-size:.82rem; color:var(--ink-2); margin:0 0 .9em; padding:0 2px}
+.ch-legend span{display:inline-flex; align-items:center; gap:.45em}
+.ch-legend i{width:11px; height:11px; border-radius:3px; flex:none}
+.ch-note{font-size:.79rem; color:var(--muted); margin:.7em 2px 0; font-family:"IBM Plex Mono",monospace}
+
+/* ---------- replay grid ---------- */
+.clip{border:1px solid var(--rule); border-radius:10px; overflow:hidden; background:var(--surface)}
+.clip video{width:100%; display:block; background:var(--surface-2);
+  aspect-ratio:760/348; object-fit:cover}
+.clip .meta{display:flex; align-items:baseline; gap:.6em; padding:.7em .9em; border-top:1px solid var(--rule-2); flex-wrap:wrap}
+.clip .nm{font-weight:600; font-size:.92rem}
+.clip .sc{font-family:"IBM Plex Mono",monospace; font-size:.86rem; margin-left:auto; font-variant-numeric:tabular-nums}
+.clip .out{font-family:"IBM Plex Mono",monospace; font-size:.72rem; border-radius:4px; padding:.1em .45em; border:1px solid}
+.out.ok{color:var(--good); border-color:color-mix(in srgb, var(--good) 35%, transparent)}
+.out.no{color:var(--bad); border-color:color-mix(in srgb, var(--bad) 35%, transparent)}
+.clip .why{padding:0 .9em .8em; font-size:.82rem; color:var(--muted); line-height:1.5; margin:0}
+.clip.feature{border-color:var(--accent); box-shadow:var(--shadow)}
+.grid4{display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-top:14px}
+@media (max-width:700px){ .grid4{grid-template-columns:1fr} }
+
+/* ---------- misc blocks ---------- */
+.callout{
+  border-left:2px solid var(--accent); background:var(--surface); padding:1em 1.2em;
+  margin:1.8em 0; border-radius:0 8px 8px 0; font-size:.97rem; color:var(--ink-2);
+}
+.callout b{color:var(--ink)}
+.two{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+@media (max-width:700px){ .two{grid-template-columns:1fr} }
+.scene-shots{display:grid; grid-template-columns:auto 1fr 1fr; gap:12px; align-items:end}
+@media (max-width:700px){ .scene-shots{grid-template-columns:1fr} }
+.scene-shots img{border-radius:8px; border:1px solid var(--rule)}
+details.more{margin:1.4em 0; border:1px solid var(--rule); border-radius:8px; background:var(--surface)}
+details.more summary{cursor:pointer; padding:.75em 1em; font-size:.9rem; font-weight:500; list-style:none}
+details.more summary::-webkit-details-marker{display:none}
+details.more summary::before{content:"▸ "; color:var(--muted)}
+details.more[open] summary::before{content:"▾ "}
+details.more .body{padding:0 1em 1em}
+.nav .sp2{margin-left:auto}
+pre{
+  background:var(--surface); border:1px solid var(--rule); border-radius:8px; padding:1em 1.1em;
+  overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.8rem; line-height:1.6; color:var(--ink-2);
+  margin:1.2em 0;
+}
+
+/* ---------- nav ---------- */
+.nav{position:sticky; top:0; z-index:20; background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--rule-2)}
+.nav-in{display:flex; align-items:center; gap:4px; max-width:var(--w); margin:0 auto; padding:0 20px; overflow-x:auto;
+  scrollbar-width:none}
+.nav-in::-webkit-scrollbar{display:none}
+.nav a{padding:.75em .6em; font-size:.83rem; color:var(--muted); white-space:nowrap; font-weight:500}
+.nav a:hover{color:var(--ink); text-decoration:none}
+.nav a.on{color:var(--accent); box-shadow:inset 0 -2px 0 var(--accent)}
+.nav .sp{margin-left:auto}
+.tt{position:fixed; pointer-events:none; z-index:60; background:var(--ink); color:var(--bg);
+  font-family:"IBM Plex Mono",monospace; font-size:.75rem; padding:.4em .6em; border-radius:6px;
+  opacity:0; transition:opacity .12s; white-space:nowrap; line-height:1.5}
+@media (prefers-reduced-motion:reduce){ *{animation:none!important; transition:none!important; scroll-behavior:auto!important} }
+html{scroll-behavior:smooth; scroll-padding-top:56px}
+</style>
+</head>
+<body>
+
+<nav class="nav" aria-label="Sections">
+  <div class="nav-in">
+    <a href="#problem">Problem</a>
+    <a href="#idea">Idea</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="#data">Data</a>
+    <a href="#heldout">Held-out</a>
+    <a href="#replay">Replay vs. models</a>
+    <a href="#arena">Arena</a>
+    <a href="#robot" class="sp2">Real robot</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <!-- ============ MASTHEAD ============ -->
+  <header class="masthead">
+    <h1>Learning Social Navigation from Internet Videos in the Policy State Space</h1>
+
+    <ul class="links">
+      <li><a href="https://arxiv.org/abs/2609.37476"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 1.5h6l4 4v9H3z"/><path d="M9 1.5v4h4"/></svg> Paper (arXiv)</a></li>
+      <li><a href="#overview-video"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M6.5 6.2v3.6L10 8z" fill="currentColor" stroke="none"/></svg> Video</a></li>
+      <li><a href="#" aria-disabled="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5.5 11.5 2 8l3.5-3.5M10.5 4.5 14 8l-3.5 3.5"/></svg> Code (on release)</a></li>
+      <li><a href="#" aria-disabled="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><ellipse cx="8" cy="4" rx="5.5" ry="2.2"/><path d="M2.5 4v8c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2V4"/></svg> Dataset (on release)</a></li>
+    </ul>
+
+    <p class="lede" style="margin-top:2em">
+      Building a social-navigation simulator normally means building a world: layouts, terrain,
+      3D assets, and a pedestrian model that decides how people behave. We skip the world.
+      An ordinary monocular walking video is converted <em>directly</em> into the policy's own
+      state space — a metric traversability map plus the pedestrian trajectories actually recorded
+      on that street — and that is enough to train a closed-loop policy.
+    </p>
+
+  </header>
+
+  <!-- ============ VIDEO ============ -->
+  <section id="overview-video">
+    <p class="eyebrow">Overview video</p>
+    <h2>Three minutes, end to end</h2>
+    <p class="dek">Video pipeline, replay simulator, Arena transfer, and the Go2 deployment.</p>
+    <figure class="wide plain" style="margin-top:1.6em">
+      <video class="ovideo" controls preload="metadata" poster="assets/img/overview_poster.jpg" playsinline>
+        <source src="assets/video/overview.mp4" type="video/mp4">
+        Your browser cannot play this video.
+      </video>
+    </figure>
+  </section>
+
+  <!-- ============ PROBLEM ============ -->
+  <section id="problem">
+    <p class="eyebrow">Motivation</p>
+    <h2>Two bottlenecks, both made of hand-built content</h2>
+
+    <p>
+      Social-navigation policies are trained in simulation, because learning them on real robots
+      is costly and potentially unsafe. But the simulators themselves are expensive in two
+      independent ways, and each caps a different kind of diversity:
+    </p>
+
+    <div class="two" style="margin:1.8em 0">
+      <div class="callout" style="margin:0">
+        <b>Scene diversity is capped by construction cost.</b> Layouts, terrain and obstacles are
+        modelled by hand, so a benchmark ships a handful of environments — and a policy only ever
+        sees the streets someone had budget to build.
+      </div>
+      <div class="callout" style="margin:0">
+        <b>Behavior diversity is capped by the pedestrian model.</b> People are driven by social
+        force or a learned trajectory predictor, so the policy only meets the encounters that model
+        can produce, not the ones that actually happen on a street.
+      </div>
+    </div>
+
+    <p>
+      The obvious fix — reconstruct real scenes from video — replaces the artist with a
+      reconstruction, but keeps the expensive part. Gaussian splats, generated assets and
+      neural renderers all have to <em>render counterfactual observations</em>: the moment the
+      robot steps off the recorded camera path, the simulator must synthesise what it would
+      have seen. Dynamic social scenes make this worse, since people now need appearance
+      models and motion models too.
+    </p>
+
+    <figure class="wide">
+      <div class="routes">
+
+        <div class="rh"></div>
+        <div class="rh">
+          <h4>Simulation in pixel space</h4>
+          <p class="cost">hours per scene · renders every step</p>
+        </div>
+        <div class="rh ours-col">
+          <h4>Simulation in state space</h4>
+          <p class="cost">4.5 min per 20 s clip · never renders</p>
+        </div>
+
+        <div class="rowlab">Source</div>
+        <div class="cell">
+          <div class="tokrow"><span class="tok n">LLM</span><span class="tok n">designer</span><span class="tok n">video</span></div>
+          <p class="note">Layouts, terrain and 3D assets are authored, or reconstructed into something renderable.</p>
+        </div>
+        <div class="cell ours-col">
+          <div class="pair">
+            <img src="assets/img/teaser_frame_40.jpg" alt="First-person frame of a city street at t = 4 s." loading="lazy">
+            <img src="assets/img/teaser_frame_80.jpg" alt="The same walk at t = 8 s." loading="lazy">
+          </div>
+          <p class="note">An ordinary monocular walking video. Nothing else.</p>
+        </div>
+
+        <div class="rowlab">World</div>
+        <div class="cell">
+          <div class="tokrow"><span class="tok n">geometry</span><span class="tok n">assets</span><span class="tok n">human model</span></div>
+          <p class="note">A 3D scene plus scripted people, whose behavior is whatever the chosen model produces.</p>
+        </div>
+        <div class="cell ours-col">
+          <div class="pair">
+            <figure style="margin:0">
+              <img src="assets/img/layer_static.png" alt="Overhead metric traversability map: green walkable ground, red obstacles, grey unobserved." loading="lazy">
+              <figcaption>static → rigid warp</figcaption>
+            </figure>
+            <figure style="margin:0">
+              <img src="assets/img/layer_dynamic.png" alt="Overhead view of recorded pedestrian trajectories with velocity arrows." loading="lazy">
+              <figcaption>dynamic → replay at t</figcaption>
+            </figure>
+          </div>
+          <p class="note">A metric traversability map and the trajectories people actually walked.</p>
+        </div>
+
+        <div class="rowlab">Observation</div>
+        <div class="cell">
+          <img src="assets/img/pixel_render.jpg" alt="A photorealistic rendered street scene from a 3D reconstruction pipeline."
+               style="aspect-ratio:16/8; object-fit:cover; object-position:50% 45%">
+          <p class="note">Rendered pixels — re-synthesised for every counterfactual robot pose.</p>
+        </div>
+        <div class="cell ours-col">
+          <img src="assets/img/robot_state.png" alt="Egocentric traversability map with pedestrian discs, the goal star and the robot's own path."
+               style="aspect-ratio:16/8; object-fit:cover; object-position:50% 42%">
+          <p class="note">The robot-frame state itself — a rigid transform away, at any pose.</p>
+        </div>
+
+        <div class="rowlab">Policy acts on</div>
+        <div class="cell"><div class="tokrow"><span class="tok">pixels</span></div></div>
+        <div class="cell ours-col"><div class="tokrow"><span class="tok">state</span></div></div>
+
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--trav)"></i>traversable</span>
+        <span><i style="background:var(--obst)"></i>non-traversable</span>
+        <span><i style="background:var(--unobs)"></i>unobserved</span>
+        <span><i style="background:var(--ped)"></i>people</span>
+        <span><i class="ln" style="background:var(--cam)"></i>camera path</span>
+        <span><i class="ln" style="background:currentColor"></i>robot</span>
+      </div>
+      <figcaption>
+        <b>From video to social-navigation simulation.</b> The recorded world is decomposed into a
+        static traversability map, which is rigidly transformed under counterfactual robot motion,
+        and dynamic pedestrian trajectories, which are replayed over time. This lightweight
+        abstraction enables efficient simulation and reinforcement learning without reconstructing
+        or rendering photorealistic scenes.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ IDEA ============ -->
+  <section id="idea">
+    <p class="eyebrow">Key idea</p>
+    <h2>A navigation policy does not need pixels</h2>
+
+    <p>
+      Local social navigation depends on two things: <strong>where the robot can traverse</strong>
+      and <strong>how nearby pedestrians move</strong>. Both are geometric. Neither needs
+      appearance. So instead of reconstructing a scene that can be rendered, we recover only those
+      two quantities and define the simulator's forward dynamics directly on them.
+    </p>
+
+    <p>That choice is what makes counterfactual robot motion cheap, because each layer transforms in a way that needs no model:</p>
+
+    <div class="tbl-wrap" style="margin-top:1.6em">
+      <table>
+        <thead>
+          <tr><th>Layer</th><th class="lft">What it holds</th><th class="lft">Under counterfactual robot motion</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Static</td>
+            <td class="lft wrap-cell">Gravity-aligned metric traversability map, accumulated causally</td>
+            <td class="lft wrap-cell">A <strong>rigid transform</strong> into the new robot pose — exact, no rendering</td>
+          </tr>
+          <tr>
+            <td>Dynamic</td>
+            <td class="lft wrap-cell">Time-indexed pedestrian states <span class="num">(x, y, vₓ, v_y)</span></td>
+            <td class="lft wrap-cell"><strong>Replayed</strong> at the video's own clock — real speeds, crossings and crowd patterns, no behavior model</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      World time follows the recording; the robot pose evolves independently from the policy's
+      velocity commands. The two only interact when the recorded state is transformed into the
+      robot's current frame — which is defined for <em>any</em> pose. So the robot can stop, turn,
+      or leave the demonstrator's path entirely and still observe a consistent world state.
+    </p>
+
+    <div class="callout">
+      <b>The cost of this abstraction.</b> Pedestrians replay rather than react, and the map only
+      covers what the camera saw. Both are measured rather than assumed — and
+      <a href="#replay">replay turns out to beat both reactive alternatives we tested</a>,
+      including on an independent benchmark whose crowds <em>are</em> reactive.
+    </div>
+  </section>
+
+  <!-- ============ PIPELINE ============ -->
+  <section id="pipeline">
+    <p class="eyebrow">Method</p>
+    <h2>The pipeline, stage by stage</h2>
+    <p class="dek">
+      Every stage below runs on ordinary 4K walking-tour footage with pretrained perception models.
+      One 20 s clip (200 frames at 10 fps) takes 4.5 minutes on a single A100.
+    </p>
+
+    <figure class="full" style="padding-inline:16px">
+      <div class="stages">
+        <div class="stage">
+          <h4><em>a</em> Walking video</h4>
+          <div class="imgs">
+            <img src="assets/img/ov_vid_40.jpg" alt="Walking video frame at t = 4 s." loading="lazy">
+            <img src="assets/img/ov_vid_60.jpg" alt="Walking video frame at t = 6 s." loading="lazy">
+            <img src="assets/img/ov_vid_80.jpg" alt="Walking video frame at t = 8 s." loading="lazy">
+          </div>
+          <p>First-person 4K walking tours. The only input.</p>
+        </div>
+
+        <div class="stage">
+          <h4><em>b</em> Data processing</h4>
+          <div class="imgs">
+            <img src="assets/img/ov_masks.jpg" alt="Person segmentation masks over the street frame." loading="lazy">
+            <img src="assets/img/ov_trav.jpg" alt="Per-pixel traversability prediction over the street frame." loading="lazy">
+            <img src="assets/img/ov_depth.jpg" alt="Metric depth map of the street frame." loading="lazy">
+          </div>
+          <p>People (YOLO11 + BoT-SORT), walkability (SAM-TP) and metric depth + camera poses
+             (Depth Anything 3), fused into a gravity-aligned world frame.</p>
+        </div>
+
+        <div class="stage">
+          <h4><em>c</em> Metric replay step</h4>
+          <div class="imgs">
+            <img src="assets/img/ov_replay.png" alt="Robot-frame traversability map with replayed pedestrians, goal and paths." loading="lazy">
+          </div>
+          <p>World time follows the recording; the robot pose integrates from the policy's command
+             with a unicycle model. Map and people are transformed into the robot frame each step.</p>
+          <div class="tokrow" style="margin-top:.6em">
+            <span class="tok n">0.1 m cells</span><span class="tok n">±10 m</span><span class="tok n">10 Hz</span>
+            <span class="tok n">~1,000 steps/s</span>
+          </div>
+        </div>
+
+        <div class="stage">
+          <h4><em>d</em> Policy</h4>
+          <div class="tokrow">
+            <span class="tok">z</span><span class="tok">B<sub>t</sub></span>
+            <span class="tok">h<sub>t</sub><sup>1:K</sup></span><span class="tok">g<sub>t</sub><sup>R</sup></span>
+            <span class="tok">a<sub>t−1</sub></span>
+          </div>
+          <div style="border:1px solid var(--rule); border-radius:6px; padding:.6em .7em; background:var(--surface-2); font-size:.76rem; color:var(--ink-2); line-height:1.5; font-family:'IBM Plex Mono',monospace">
+            transformer · 4 blocks<br>203 tokens · d = 192<br>1.6 M parameters
+          </div>
+          <div class="tokrow" style="margin-top:.5em">
+            <span class="tok">actor → Beta (v, ω)</span><span class="tok n">critic V</span>
+          </div>
+          <p>180 angular cone tokens + up to 20 pedestrian tokens + goal + previous action.
+             RoPE on the cone tokens only; pedestrian tokens stay permutation-invariant.</p>
+          <p>Trained with PPO from scratch in the replay simulator — 32 parallel environments,
+             reward on goal progress with collision termination.</p>
+        </div>
+
+        <div class="stage">
+          <h4><em>e</em> Deployment</h4>
+          <div class="imgs">
+            <img src="assets/img/ov_go2_rgb.jpg" alt="Onboard RGB view from the Go2's camera on a brick path." loading="lazy">
+            <img src="assets/img/ov_go2_bev.png" alt="Traversability map and pedestrian tracks built online on the robot." loading="lazy">
+          </div>
+          <p>The same state is rebuilt online from RGB-D and odometry, so the video-trained policy
+             transfers with no modification.</p>
+        </div>
+      </div>
+      <figcaption style="max-width:none">
+        <b>Overview.</b> (a) First-person walking videos are processed by (b) pretrained perception
+        models to recover a gravity-aligned metric traversability map and time-indexed pedestrian
+        states. (c) These quantities define the state-space replay simulator. (d) A lightweight
+        transformer encodes the egocentric map, nearby pedestrians, goal and previous action, and
+        outputs velocity commands. (e) At deployment the same policy state is reconstructed online
+        from onboard perception.
+      </figcaption>
+    </figure>
+
+    <h3>What the simulator actually checks</h3>
+    <p>
+      The map is accumulated <em>causally</em>: the map the robot sees at video time <span class="num">t</span>
+      contains only cells the camera had observed by <span class="num">t</span>, never ground revealed later.
+      On top of that state the simulator enforces the usual robot constraints —
+    </p>
+    <ul style="color:var(--ink-2)">
+      <li><strong>Static collision</strong> when the 20th percentile of map values under the
+          <span class="num">0.7 × 0.5 m</span> footprint falls below <span class="num">0.1</span>.</li>
+      <li><strong>Pedestrian collision</strong> against <span class="num">0.25 m</span> discs at each person's replayed position.</li>
+      <li><strong>Episode start jittered</strong> in a <span class="num">2 m</span> forward half-disc, goal at least
+          <span class="num">15 m</span> ahead — so the policy cannot simply replay the camera trajectory.</li>
+    </ul>
+    <p>
+      Training is PPO from scratch, 32 parallel environments, at roughly
+      <strong>1,000 environment steps per second</strong> on one RTX 5090 — a 100 M-step run takes 26 hours.
+    </p>
+  </section>
+
+  <!-- ============ DATA ============ -->
+  <section id="data">
+    <p class="eyebrow">Corpus</p>
+    <h2>44 walking tours, 29 cities, no overlap between splits</h2>
+
+    <figure class="wide plain">
+      <img src="assets/img/video_examples.jpg" alt="Three held-out source frames: an evening crowd in Istanbul, a rainy London shopping street, and a snowy street at dusk in Tromsø.">
+      <figcaption>
+        Frames from three held-out source videos: an evening crowd on Istiklal Street (Istanbul),
+        a rainy shopping street (London), and a snow-covered street at dusk (Tromsø). Ordinary
+        first-person walking tours like these are the only input of the pipeline.
+      </figcaption>
+    </figure>
+
+    <div class="tbl-wrap">
+      <table>
+        <caption>Corpus statistics. Train and test videos are disjoint, with no city shared between the splits.</caption>
+        <thead><tr><th>&nbsp;</th><th>Train</th><th>Test</th></tr></thead>
+        <tbody>
+          <tr><td>Source videos (distinct cities)</td><td>25 (12)</td><td>19 (17)</td></tr>
+          <tr><td>20 s episodes extracted</td><td>8,147</td><td>3,126</td></tr>
+          <tr><td>Episodes passing gates</td><td>6,075</td><td>2,155</td></tr>
+          <tr><td>Hours of usable video</td><td>33.8</td><td>12.0</td></tr>
+          <tr><td>Pedestrian tracks</td><td>91,261</td><td>29,846</td></tr>
+          <tr><td>Tracks per episode (mean)</td><td>15.0</td><td>13.8</td></tr>
+          <tr><td>Pedestrians per frame (mean / max)</td><td>2.5 / 18</td><td>2.3 / 18</td></tr>
+          <tr><td>Frames with ≥ 1 pedestrian</td><td>72%</td><td>68%</td></tr>
+          <tr><td>Demonstrator path per episode (m)</td><td>23.7</td><td>21.7</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ HELD-OUT ============ -->
+  <section id="heldout">
+    <p class="eyebrow">Result 1 — unseen videos</p>
+    <h2>92.6% on 2,155 episodes from cities it has never seen</h2>
+    <p class="dek">
+      Closed-loop in the state-space simulator. The robot starts at the demonstrator's pose at
+      t = 2 s and must reach a point at least 15 m ahead, among the recorded people.
+    </p>
+
+
+    <div class="tbl-wrap">
+      <table>
+        <caption>Closed-loop evaluation on the held-out episodes in the state-space simulator.</caption>
+        <tbody>
+          <tr><td>Success rate (95% Wilson interval)</td><td class="best">92.6% <span class="ci">[91.4, 93.7]</span></td></tr>
+          <tr><td>Pedestrian collision</td><td>3.7%</td></tr>
+          <tr><td>Static-obstacle collision</td><td>1.9%</td></tr>
+          <tr><td>Timeout (18 s)</td><td>1.8%</td></tr>
+          <tr><td>SPL</td><td>0.860</td></tr>
+          <tr><td>Path efficiency (shortest / traveled)</td><td>0.928</td></tr>
+          <tr><td>Time to goal (s)</td><td>12.2</td></tr>
+          <tr><td>Mean speed (m/s)</td><td>1.28</td></tr>
+          <tr><td>Time in personal zone (&lt; 1.2 m) per episode (s)</td><td>0.24</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      For scale: replaying <em>the recorded camera trajectory itself</em> — a real person walking that
+      street — satisfies the same collision criteria in only <strong>72%</strong> of episodes, with
+      21% pedestrian and 7% static collisions. The walker brushes past people far closer than the
+      robot's rules allow.
+    </p>
+  </section>
+
+  <!-- ============ REPLAY VS MODELS ============ -->
+  <section id="replay">
+    <p class="eyebrow">Result 2 — the central claim</p>
+    <h2>Replaying people beats modelling them</h2>
+    <p class="dek">
+      The simulator's main approximation is that pedestrians follow their recorded trajectories
+      instead of reacting to the robot. If that were a serious limitation, a reactive model should
+      train a better policy. It does not.
+    </p>
+
+    <h3>One held-out episode, five policies</h3>
+    <p>
+      A street in Belgrade, from a video none of these policies has seen. Every clip is the same
+      episode with the same deterministic start; only the training setup differs. Left panel is the
+      policy's egocentric observation, right panel the world map with the path it took.
+    </p>
+
+    <figure class="wide">
+      <div class="clip feature">
+        <video src="assets/video/replay_ours.mp4" poster="assets/img/replay_ours.jpg"
+               muted loop playsinline preload="metadata" data-auto></video>
+        <div class="meta">
+          <span class="nm">Trained on replayed people</span>
+          <span class="out ok">reached the goal</span>
+          <span class="sc">91.4%</span>
+        </div>
+        <p class="why">Reads the two approaching people early, arcs wide around them, and carries
+          its speed through to the goal — 126 steps.</p>
+      </div>
+
+      <div class="grid4">
+        <div class="clip">
+          <video src="assets/video/replay_trajpeds.mp4" poster="assets/img/replay_trajpeds.jpg"
+                 muted loop playsinline preload="metadata" data-auto></video>
+          <div class="meta"><span class="nm">Trajectron++ people</span><span class="out no">collision</span><span class="sc">90.0%</span></div>
+          <p class="why">Trained against a learned predictor. Commits to a line between the two
+            people and contacts one at step 88.</p>
+        </div>
+        <div class="clip">
+          <video src="assets/video/replay_sfmpeds.mp4" poster="assets/img/replay_sfmpeds.jpg"
+                 muted loop playsinline preload="metadata" data-auto></video>
+          <div class="meta"><span class="nm">Social-force people</span><span class="out no">collision</span><span class="sc">75.6%</span></div>
+          <p class="why">Trained against people who yield to the robot, so it holds course and
+            expects them to move. They don't — step 81.</p>
+        </div>
+        <div class="clip">
+          <video src="assets/video/replay_frac25.mp4" poster="assets/img/replay_frac25.jpg"
+                 muted loop playsinline preload="metadata" data-auto></video>
+          <div class="meta"><span class="nm">25% of the videos</span><span class="out no">collision</span><span class="sc">81.8%</span></div>
+          <p class="why">Same method, quarter of the corpus. Starts to turn far too late — fewer
+            videos means fewer crowd configurations seen.</p>
+        </div>
+        <div class="clip">
+          <video src="assets/video/replay_il.mp4" poster="assets/img/replay_il.jpg"
+                 muted loop playsinline preload="metadata" data-auto></video>
+          <div class="meta"><span class="nm">Imitation only</span><span class="out no">collision</span><span class="sc">55.3%</span></div>
+          <p class="why">Supervised on the demonstrator's own motion, never trained closed-loop.
+            Tracks the walked path straight into the pair.</p>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--trav)"></i>traversable</span>
+        <span><i style="background:var(--obst)"></i>non-traversable</span>
+        <span><i style="background:var(--unobs)"></i>unobserved</span>
+        <span><i class="dot" style="background:var(--obst)"></i>pedestrians (+ velocity)</span>
+        <span><i class="ln" style="background:var(--cam)"></i>camera path</span>
+        <span><i class="ln" style="background:currentColor"></i>policy path</span>
+      </div>
+      <figcaption>
+        One episode is an illustration, not evidence — it is one of the 166 held-out episodes where
+        the replay-trained policy succeeds and all four variants collide. The percentage on each
+        card is that policy's success rate over all 2,155 held-out episodes, which is the claim the
+        clips illustrate. All five are 30 M-step runs evaluated under identical conditions.
+      </figcaption>
+    </figure>
+
+    <h3>The cross-evaluation that settles it</h3>
+    <p>
+      Training on replay could simply be tuning a policy to a quirk of replay. So each policy is
+      scored under all three pedestrian dynamics — the recorded replay, a social-force crowd, and a
+      Trajectron++ crowd. A policy that only works in its own training dynamics would show a
+      strong diagonal. The replay-trained policy is the best or tied-best in <em>every</em> column:
+    </p>
+
+    <figure class="wide">
+      <div class="chart">
+        <div id="xeval"></div>
+      </div>
+      <figcaption>
+        <b>Success rate (%) on the same 2,155 held-out episodes, under three pedestrian dynamics at
+        evaluation time.</b> Rows are what the policy was trained against; columns are what it is
+        tested against. Training on social force costs 16–18 points whenever the crowd is not
+        social force.
+      </figcaption>
+    </figure>
+
+    <p>
+      Trajectron++ matches replay without improving on it, and costs more to get there: it is an extra
+      model that has to be trained (here from scratch on our own tracks, with no test video touching
+      it) and it drops the simulator from about 1,000 steps/s to 800. Social force is clearly worse.
+      Direct replay is the simplest of the three and the most robust.
+    </p>
+
+    <h3>More video is what helps</h3>
+    <p>
+      If the recorded crowds are the source of the policy's competence, then adding videos should
+      buy competence — and specifically it should buy <em>pedestrian</em> safety rather than
+      general path quality. It does:
+    </p>
+
+    <figure class="wide">
+      <div class="chart">
+        <div id="scaling"></div>
+      </div>
+      <figcaption>
+        Scaling the corpus from 25% to 100% of the videos lifts success from 81.8% to 91.4%, and
+        the clearest movement is in pedestrian collisions, which fall from 13.5% to 4.4%. Static
+        collisions stay low and flat throughout.
+      </figcaption>
+    </figure>
+
+    <details class="more">
+      <summary>Full ablation table — all 30 M-step variants on the 2,155 held-out episodes</summary>
+      <div class="body">
+        <div class="tbl-wrap" style="margin-top:.4em">
+          <table>
+            <thead>
+              <tr><th>Variant</th><th>Succ. ↑</th><th>SPL ↑</th><th>Ped. coll. ↓</th><th>Stat. coll. ↓</th><th>Pers. (s) ↓</th></tr>
+            </thead>
+            <tbody>
+              <tr class="is-ours"><td>Control</td><td>91.4 <span class="ci">[90.1, 92.5]</span></td><td>0.858</td><td>4.4</td><td>1.5</td><td>0.19</td></tr>
+              <tr><td>IL only</td><td>55.3 <span class="ci">[53.2, 57.4]</span></td><td>0.548</td><td>32.1</td><td>11.2</td><td>0.46</td></tr>
+              <tr><td>PPO from IL initialization</td><td>90.0 <span class="ci">[88.6, 91.2]</span></td><td>0.859</td><td>5.4</td><td>1.2</td><td>0.45</td></tr>
+              <tr><td>No spawn jitter</td><td>90.4 <span class="ci">[89.1, 91.6]</span></td><td>0.860</td><td>5.4</td><td>1.6</td><td>0.58</td></tr>
+              <tr><td>90° FOV map</td><td>88.9 <span class="ci">[87.5, 90.1]</span></td><td>0.846</td><td>4.5</td><td>1.3</td><td>0.09</td></tr>
+              <tr><td>Proxemics reward</td><td>85.0 <span class="ci">[83.4, 86.5]</span></td><td>0.823</td><td>11.5</td><td>2.1</td><td>0.42</td></tr>
+              <tr><td>Square-patch tokens</td><td>89.7 <span class="ci">[88.3, 90.9]</span></td><td>0.855</td><td>5.4</td><td>1.9</td><td>0.39</td></tr>
+              <tr><td>25% training videos</td><td>81.8 <span class="ci">[80.1, 83.3]</span></td><td>0.791</td><td>13.5</td><td>2.4</td><td>0.28</td></tr>
+              <tr><td>50% training videos</td><td>88.2 <span class="ci">[86.8, 89.5]</span></td><td>0.834</td><td>5.0</td><td>0.9</td><td>0.24</td></tr>
+              <tr><td>Social-force pedestrians</td><td>75.6 <span class="ci">[73.7, 77.4]</span></td><td>0.738</td><td>21.1</td><td>1.6</td><td>0.44</td></tr>
+              <tr><td>Trajectron++ pedestrians</td><td>90.0 <span class="ci">[88.7, 91.2]</span></td><td>0.850</td><td>5.7</td><td>1.8</td><td>0.34</td></tr>
+              <tr class="grp"><td colspan="6">Same episodes, pedestrians driven by social-force model</td></tr>
+              <tr class="is-ours"><td>Control</td><td>93.4 <span class="ci">[92.3, 94.4]</span></td><td>0.872</td><td>1.8</td><td>1.5</td><td>0.18</td></tr>
+              <tr><td>Social-force pedestrians</td><td>88.7 <span class="ci">[87.3, 89.9]</span></td><td>0.859</td><td>7.6</td><td>1.4</td><td>0.59</td></tr>
+              <tr><td>Trajectron++ pedestrians</td><td>93.3 <span class="ci">[92.1, 94.3]</span></td><td>0.878</td><td>2.3</td><td>1.7</td><td>0.32</td></tr>
+              <tr class="grp"><td colspan="6">Same episodes, pedestrians driven by Trajectron++ model</td></tr>
+              <tr class="is-ours"><td>Control</td><td>91.9 <span class="ci">[90.7, 93.0]</span></td><td>0.866</td><td>4.1</td><td>1.5</td><td>0.20</td></tr>
+              <tr><td>Social-force pedestrians</td><td>75.5 <span class="ci">[73.6, 77.2]</span></td><td>0.738</td><td>21.8</td><td>1.3</td><td>0.46</td></tr>
+              <tr><td>Trajectron++ pedestrians</td><td>91.3 <span class="ci">[90.0, 92.4]</span></td><td>0.870</td><td>5.2</td><td>1.6</td><td>0.37</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:.87rem; color:var(--muted); margin:0">
+          Succ. is success rate; Ped. coll. and Stat. coll. are pedestrian and static-obstacle
+          collision rates; Pers. is time per episode within 1.2 m of a pedestrian. Brackets are 95%
+          Wilson confidence intervals. All variants trained for 30 M steps.
+        </p>
+      </div>
+    </details>
+
+    <div class="callout">
+      <b>Closed-loop interaction is the thing that matters, not the demonstrations.</b>
+      Imitating the recovered demonstrator motion reaches 55.3%, against 91.4% for PPO from scratch —
+      and initialising PPO from that imitation policy gives no benefit at all (90.0%). The value of
+      the video is not that it contains expert actions; it is that it can be turned into an
+      environment where failures and recoveries that are absent from any demonstration can happen.
+    </div>
+  </section>
+
+  <!-- ============ ARENA ============ -->
+  <section id="arena">
+    <p class="eyebrow">Result 3 — independent benchmark</p>
+    <h2>Transfer to Arena with no fine-tuning</h2>
+    <p class="dek">
+      Arena / Isaac Sim, four UrbanVerse street scenes, 160 scripted scenarios with reactive
+      social-force pedestrians. A Clearpath Jackal with an OAK-D camera navigates between goals
+      18–22 m apart. Our policy is dropped in at 10 Hz, unchanged.
+    </p>
+
+    <div class="two" style="margin:1.8em 0; align-items:center">
+      <figure class="plain" style="margin:0">
+        <img src="assets/img/arena_rgb.jpg" alt="Isaac Sim view of a rendered street scene with pedestrians." style="width:100%">
+        <figcaption style="margin-top:.6em">What Arena renders.</figcaption>
+      </figure>
+      <figure class="plain" style="margin:0">
+        <img src="assets/img/arena_bev.png" alt="The traversability map the policy builds online from the OAK-D depth camera." style="width:100%">
+        <figcaption style="margin-top:.6em">What our policy uses — rebuilt online from RGB-D. No LiDAR, no prebuilt map, no global plan.</figcaption>
+      </figure>
+    </div>
+
+    <div class="tbl-wrap wide">
+      <table class="dense">
+        <caption>
+          Arena / Isaac Sim results on 160 scenarios. Personal and intimate denote seconds per
+          episode within 1.2 m and 0.45 m of a pedestrian. Every baseline receives more input than
+          we do; all methods are given ground-truth pedestrian positions.
+        </caption>
+        <thead>
+          <tr>
+            <th>Method</th><th>LiDAR</th><th>Plan</th><th>Succ. ↑</th>
+            <th>Coll. ↓ (ped/wall)</th><th>T/O ↓</th><th>Time ↓</th><th>SPL ↑</th>
+            <th>Pers. ↓</th><th>Intim. ↓</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>CrowdSurfer</td><td>✓</td><td>✓</td><td>42.5 <span class="ci">[35.1, 50.2]</span></td><td>50.0 (47.5/2.5)</td><td>7.5</td><td>46.2</td><td>0.418</td><td>19.9</td><td>1.9</td></tr>
+          <tr><td>AttnGraph</td><td>—</td><td>✓</td><td>35.0 <span class="ci">[28.0, 42.7]</span></td><td>45.6 (11.2/34.4)</td><td>19.4</td><td>52.0</td><td>0.299</td><td>10.3</td><td class="best">1.2</td></tr>
+          <tr><td>HEIGHT</td><td>✓</td><td>✓</td><td>75.0 <span class="ci">[67.8, 81.1]</span></td><td>25.0 (19.4/5.6)</td><td class="best">0.0</td><td>46.4</td><td>0.714</td><td>11.8</td><td>3.5</td></tr>
+          <tr><td>Ours (SF people)</td><td>—</td><td>—</td><td>58.1 <span class="ci">[50.4, 65.5]</span></td><td>41.9 (39.4/2.5)</td><td class="best">0.0</td><td class="best">42.6</td><td>0.559</td><td class="best">8.4</td><td>1.8</td></tr>
+          <tr><td>Ours (Traj.++ people)</td><td>—</td><td>—</td><td>70.0 <span class="ci">[62.5, 76.6]</span></td><td>25.0 (20.0/5.0)</td><td>5.0</td><td>51.9</td><td>0.599</td><td>12.2</td><td>2.3</td></tr>
+          <tr class="is-ours"><td>Ours (replay)</td><td>—</td><td>—</td><td>81.2 <span class="ci">[74.5, 86.5]</span></td><td>15.0 (13.8/1.2)</td><td>3.8</td><td>46.2</td><td>0.747</td><td>10.6</td><td>2.1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Against HEIGHT, the strongest baseline, success improves by <strong>6.2 points</strong> and
+      collisions fall from 25.0% to 15.0% — both pedestrian contacts (13.8% vs. 19.4%) and wall
+      contacts (1.2% vs. 5.6%). And the gap is not bought by timidity: our policy spends
+      <em>less</em> time in the personal and intimate zones than HEIGHT while succeeding more often.
+      It maintains progress through dense crowds, including the brief close passes that are normal
+      in the recorded videos.
+    </p>
+
+    <h3>The advantage grows with crowd density</h3>
+
+    <figure class="wide">
+      <div class="chart">
+        <div class="ch-legend">
+          <span><i style="background:var(--s-ours)"></i>Ours (RGB-D)</span>
+          <span><i style="background:var(--s-height)"></i>HEIGHT</span>
+          <span><i style="background:var(--s-attn)"></i>AttnGraph</span>
+          <span><i style="background:var(--s-crowd)"></i>CrowdSurfer</span>
+        </div>
+        <div id="density"></div>
+      </div>
+      <figcaption>
+        <b>Arena results by crowd density.</b> Easy = 0–4 pedestrians, medium = 5–9, hard = 10–14.
+        On hard scenarios our policy reaches 74.2% against 53.2% for HEIGHT — a 21-point gap where
+        it matters most. Numbers are the same 160 scenarios as the table above.
+      </figcaption>
+    </figure>
+
+    <div class="callout">
+      <b>Arena is also an out-of-distribution test of the replay assumption.</b> Its crowds react to
+      the robot, so a policy trained on non-reactive replay ought to be at a disadvantage. Instead
+      the replay-trained policy scores 81.2% while the same architecture trained with social-force
+      people reaches 58.1% and with Trajectron++ people 70.0%. Preserving real recorded motion
+      transfers better than approximating it.
+    </div>
+  </section>
+
+  <!-- ============ REAL ROBOT ============ -->
+  <section id="robot">
+    <p class="eyebrow">Result 4 — physical robot</p>
+    <h2>19 out of 20 trials on a Unitree Go2</h2>
+    <p class="dek">
+      No policy fine-tuning, no global map or planner. Traversability is built online from RGB-D and
+      odometry; pedestrians are detected and tracked from LiDAR with a YOLO11 prior.
+    </p>
+
+    <figure class="wide plain">
+      <div class="scene-shots">
+        <img src="assets/img/go2_robot.png" alt="Unitree Go2 quadruped fitted with an RGB-D camera and a LiDAR unit." style="max-height:190px; width:auto">
+        <img src="assets/img/real_indoor.jpg" alt="The indoor test scene: the robot approaching people in a corridor-like space." style="max-height:190px; width:100%; object-fit:cover">
+        <img src="assets/img/real_outdoor.jpg" alt="The outdoor test scene: the robot on a brick path with a person walking towards it." style="max-height:190px; width:100%; object-fit:cover">
+      </div>
+      <figcaption>
+        (a) Unitree Go2 with RGB-D camera and LiDAR; (b, c) the indoor and outdoor test scenes.
+        Each scene has five scripted encounters, repeated twice per method.
+      </figcaption>
+    </figure>
+
+    <div class="tbl-wrap">
+      <table>
+        <caption>
+          Real-robot results (10 trials per method and scene; means over successes). A trial
+          succeeds if the robot reaches a goal 8–10 m away without a static collision and without
+          coming within 0.3 m of a person.
+        </caption>
+        <thead><tr><th>Scene</th><th>Method</th><th>Success ↑</th><th>Mean time (s)</th><th>Mean path (m)</th></tr></thead>
+        <tbody>
+          <tr><td>Indoor</td><td class="lft">Nav2-MPPI</td><td>5/10</td><td>28.6</td><td>9.64</td></tr>
+          <tr><td></td><td class="lft">Ours (Trajectron++ people)</td><td>7/10</td><td>32.1</td><td>10.96</td></tr>
+          <tr class="is-ours"><td></td><td class="lft">Ours (replay)</td><td>9/10</td><td>31.1</td><td>10.14</td></tr>
+          <tr><td>Outdoor</td><td class="lft">Nav2-MPPI</td><td>3/10</td><td>18.9</td><td>7.74</td></tr>
+          <tr><td></td><td class="lft">Ours (Trajectron++ people)</td><td>8/10</td><td>16.1</td><td>8.29</td></tr>
+          <tr class="is-ours"><td></td><td class="lft">Ours (replay)</td><td>10/10</td><td>17.9</td><td>8.59</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      The failure mode of the baseline is instructive. MPPI treats a detected person as an occupied
+      costmap cell, so it holds its course until someone is already close and then avoids late. Both
+      learned policies receive pedestrian <em>velocities</em>, so they anticipate the encounter and
+      slow or step aside before the crossing point. The replay-trained policy's single failure is
+      indoors, where the 0.5 m/s hardware speed limit — far below the speeds it selects during
+      training — leaves it too little time to clear an approaching person's path.
+    </p>
+  </section>
+
+  <!-- ============ LIMITATIONS ============ -->
+  <section id="limits">
+    <p class="eyebrow">Limitations</p>
+    <h2>What this representation cannot do</h2>
+    <ul style="color:var(--ink-2)">
+      <li><strong>Planar ground.</strong> The representation assumes approximately planar ground
+        within each 20 × 20 m local window; substantial curvature or elevation change distorts the
+        BEV projection.</li>
+      <li><strong>Only people move.</strong> Everything else in the scene is treated as static, which
+        suits pedestrian paths but makes moving vehicles and bicycles a source of map error — and a
+        contributor to failures in mixed-traffic scenes.</li>
+      <li><strong>Perception is the floor.</strong> Pedestrian states depend on human-pose detection
+        and depth; detection errors and sensor noise degrade velocity estimates and hence collision
+        avoidance.</li>
+      <li><strong>Partial coverage.</strong> The robot can move into regions the source video never
+        observed. We measure this rather than assume it away: the policy's observed-cell coverage is
+        21% against the recorded walker's 23%, and it travels 15.2% of its path on unsupported space
+        against the walker's 11.2%.</li>
+    </ul>
+  </section>
+
+
+
+</main>
+
+<div class="tt" id="tt" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  "use strict";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (n, a) => { const e = document.createElementNS(NS, n);
+    for (const k in (a||{})) e.setAttribute(k, a[k]); return e; };
+
+  /* ---------- tooltip ---------- */
+  const tt = document.getElementById("tt");
+  function hover(node, text){
+    node.addEventListener("pointerenter", e => {
+      tt.textContent = text; tt.style.opacity = "1";
+      const move = ev => { tt.style.left = (ev.clientX + 14) + "px";
+                           tt.style.top  = (ev.clientY - 34) + "px"; };
+      move(e); node.addEventListener("pointermove", move);
+      node._mv = move;
+    });
+    node.addEventListener("pointerleave", () => {
+      tt.style.opacity = "0";
+      if (node._mv) node.removeEventListener("pointermove", node._mv);
+    });
+  }
+
+  /* =======================================================================
+     1. Cross-evaluation matrix: trained-against (rows) x evaluated-against (cols)
+     ======================================================================= */
+  (function(){
+    const host = document.getElementById("xeval");
+    if (!host) return;
+    const rows = [
+      {k:"Recorded replay",   c:"var(--s-ours)",  v:[91.4, 93.4, 91.9]},
+      {k:"Social force",      c:"var(--s-height)",v:[75.6, 88.7, 75.5]},
+      {k:"Trajectron++",      c:"var(--s-attn)",  v:[90.0, 93.3, 91.3]}
+    ];
+    const cols = ["Recorded replay", "Social-force crowd", "Trajectron++ crowd"];
+    const W = 680, padL = 140, padT = 62, padB = 30, cellH = 58, gap = 8;
+    const H = padT + rows.length * cellH + padB;
+    const cellW = (W - padL - 12) / 3;
+    const svg = el("svg", {viewBox:`0 0 ${W} ${H}`, role:"img",
+      "aria-label":"Success rate of three policies under three pedestrian dynamics at evaluation."});
+
+    // column headers
+    svg.appendChild(Object.assign(el("text",{x:padL + (W-padL-12)/2, y:padT - 40,
+      "text-anchor":"middle", fill:"var(--muted)", "font-size":"10",
+      "font-family":"IBM Plex Mono, monospace", "letter-spacing":"0.1em"}),
+      {textContent:"EVALUATED AGAINST →"}));
+    svg.appendChild(Object.assign(el("text",{x:padL - 14, y:padT - 18, "text-anchor":"end",
+      fill:"var(--muted)", "font-size":"10", "font-family":"IBM Plex Mono, monospace",
+      "letter-spacing":"0.1em"}), {textContent:"TRAINED ON ↓"}));
+    cols.forEach((c,j) => {
+      const t = el("text",{x:padL + j*cellW + cellW/2, y:padT - 18, "text-anchor":"middle",
+        fill:"var(--ink-2)", "font-size":"12", "font-family":"IBM Plex Sans, sans-serif"});
+      t.textContent = c; svg.appendChild(t);
+    });
+
+    const max = 100;
+    rows.forEach((r,i) => {
+      const y = padT + i*cellH;
+      const lab = el("text",{x:padL - 12, y:y + cellH/2 + 1, "text-anchor":"end",
+        fill:"var(--ink)", "font-size":"13", "dominant-baseline":"middle",
+        "font-family":"IBM Plex Sans, sans-serif"});
+      lab.textContent = r.k; svg.appendChild(lab);
+      // swatch
+      svg.appendChild(el("rect",{x:padL-124, y:y+cellH/2-19, width:3, height:38, rx:1.5, fill:r.c}));
+
+      r.v.forEach((v,j) => {
+        const x = padL + j*cellW;
+        const bw = (cellW - gap*2) * (v/max);
+        const g = el("g",{});
+        // track
+        g.appendChild(el("rect",{x:x+gap, y:y+cellH/2-13, width:cellW-gap*2, height:26, rx:4,
+          fill:"var(--surface-2)"}));
+        // value bar, 4px rounded data end
+        g.appendChild(el("rect",{x:x+gap, y:y+cellH/2-13, width:Math.max(bw,6), height:26, rx:4,
+          fill:r.c, opacity: (i===0 ? 1 : .82)}));
+        const t = el("text",{x:x+gap+10, y:y+cellH/2+1, fill:"#fff", "font-size":"12.5",
+          "font-weight":"600", "dominant-baseline":"middle",
+          "font-family":"IBM Plex Mono, monospace"});
+        t.textContent = v.toFixed(1);
+        g.appendChild(t);
+        hover(g, `${r.k} → ${cols[j]}: ${v.toFixed(1)}% success`);
+        g.style.cursor = "default";
+        svg.appendChild(g);
+      });
+    });
+    // baseline axis note
+    host.appendChild(svg);
+    const note = document.createElement("p");
+    note.className = "ch-note";
+    note.textContent = "bar length = success rate, 0–100%";
+    host.appendChild(note);
+  })();
+
+  /* =======================================================================
+     2. Data scaling
+     ======================================================================= */
+  (function(){
+    const host = document.getElementById("scaling");
+    if (!host) return;
+    const data = [
+      {x:"25%",  succ:81.8, ped:13.5, stat:2.4},
+      {x:"50%",  succ:88.2, ped:5.0,  stat:0.9},
+      {x:"100%", succ:91.4, ped:4.4,  stat:1.5}
+    ];
+    const W=680, H=258, L=48, R=14, T=18, B=34;
+    const pw = W-L-R, ph = H-T-B;
+    const y = v => T + ph - (v/100)*ph;
+    const svg = el("svg",{viewBox:`0 0 ${W} ${H}`, role:"img",
+      "aria-label":"Success rate and pedestrian collision rate against the fraction of training videos used."});
+
+    [0,25,50,75,100].forEach(v=>{
+      svg.appendChild(el("line",{x1:L, y1:y(v), x2:W-R, y2:y(v),
+        stroke:"var(--rule)", "stroke-width": v===0?1.2:1, "stroke-dasharray": v===0?"":"2 4"}));
+      const t = el("text",{x:L-9, y:y(v)+4, "text-anchor":"end", fill:"var(--muted)",
+        "font-size":"11", "font-family":"IBM Plex Mono, monospace"});
+      t.textContent = v; svg.appendChild(t);
+    });
+
+    const gw = pw/data.length;
+    const series = [
+      {key:"succ", c:"var(--s-ours)",  nm:"Success"},
+      {key:"ped",  c:"var(--obst)",    nm:"Pedestrian collision"},
+      {key:"stat", c:"var(--muted)",   nm:"Static collision"}
+    ];
+    const bw = 34, gap = 8;
+    data.forEach((d,i)=>{
+      const cx = L + gw*i + gw/2;
+      const x0 = cx - (bw*3 + gap*2)/2;
+      series.forEach((s,j)=>{
+        const v = d[s.key], x = x0 + j*(bw+gap), h = Math.max((v/100)*ph, 2);
+        const g = el("g",{});
+        g.appendChild(el("rect",{x, y:y(v), width:bw, height:h, rx:4, fill:s.c}));
+        // square off the baseline end so the bar sits on the axis
+        g.appendChild(el("rect",{x, y:y(v)+h-4, width:bw, height:4, fill:s.c}));
+        const t = el("text",{x:x+bw/2, y:y(v)-7, "text-anchor":"middle", fill:"var(--ink)",
+          "font-size":"11.5", "font-weight":"600", "font-family":"IBM Plex Mono, monospace"});
+        t.textContent = v.toFixed(1); g.appendChild(t);
+        hover(g, `${d.x} of videos · ${s.nm}: ${v.toFixed(1)}%`);
+        svg.appendChild(g);
+      });
+      const lb = el("text",{x:cx, y:H-B+22, "text-anchor":"middle", fill:"var(--ink)",
+        "font-size":"12.5", "font-family":"IBM Plex Mono, monospace"});
+      lb.textContent = d.x; svg.appendChild(lb);
+    });
+    host.appendChild(svg);
+
+    const lg = document.createElement("div");
+    lg.className = "ch-legend";
+    lg.style.marginTop = ".9em";
+    lg.innerHTML = series.map(s=>`<span><i style="background:${s.c}"></i>${s.nm}</span>`).join("");
+    host.appendChild(lg);
+    const note = document.createElement("p");
+    note.className = "ch-note";
+    note.textContent = "fraction of training videos used · % of the 2,155 held-out episodes";
+    host.appendChild(note);
+  })();
+
+  /* =======================================================================
+     3. Arena success by crowd density
+     ======================================================================= */
+  (function(){
+    const host = document.getElementById("density");
+    if (!host) return;
+    const groups = [
+      {k:"Easy",   sub:"0–4 people",   n:43},
+      {k:"Medium", sub:"5–9 people",   n:55},
+      {k:"Hard",   sub:"10–14 people", n:62}
+    ];
+    const series = [
+      {nm:"Ours (RGB-D)", c:"var(--s-ours)",   v:[95.3, 78.2, 74.2]},
+      {nm:"HEIGHT",       c:"var(--s-height)", v:[93.0, 85.5, 53.2]},
+      {nm:"AttnGraph",    c:"var(--s-attn)",   v:[27.9, 38.2, 37.1]},
+      {nm:"CrowdSurfer",  c:"var(--s-crowd)",  v:[86.0, 38.2, 16.1]}
+    ];
+    const W=680, H=300, L=46, R=12, T=20, B=58;
+    const pw=W-L-R, ph=H-T-B;
+    const y = v => T + ph - (v/100)*ph;
+    const svg = el("svg",{viewBox:`0 0 ${W} ${H}`, role:"img",
+      "aria-label":"Arena success rate by crowd density for four methods."});
+
+    [0,25,50,75,100].forEach(v=>{
+      svg.appendChild(el("line",{x1:L, y1:y(v), x2:W-R, y2:y(v),
+        stroke:"var(--rule)", "stroke-width": v===0?1.2:1, "stroke-dasharray": v===0?"":"2 4"}));
+      const t = el("text",{x:L-9, y:y(v)+4, "text-anchor":"end", fill:"var(--muted)",
+        "font-size":"11", "font-family":"IBM Plex Mono, monospace"});
+      t.textContent = v; svg.appendChild(t);
+    });
+
+    const gw = pw/groups.length, bw=30, gap=7;
+    groups.forEach((g,i)=>{
+      const cx = L + gw*i + gw/2;
+      const x0 = cx - (bw*4 + gap*3)/2;
+      series.forEach((s,j)=>{
+        const v = s.v[i], x = x0 + j*(bw+gap), h = Math.max((v/100)*ph, 2);
+        const node = el("g",{});
+        node.appendChild(el("rect",{x, y:y(v), width:bw, height:h, rx:4, fill:s.c}));
+        node.appendChild(el("rect",{x, y:y(v)+h-4, width:bw, height:4, fill:s.c}));
+        if (j===0){
+          const t = el("text",{x:x+bw/2, y:y(v)-7, "text-anchor":"middle", fill:"var(--ink)",
+            "font-size":"11.5", "font-weight":"600", "font-family":"IBM Plex Mono, monospace"});
+          t.textContent = v.toFixed(1); node.appendChild(t);
+        }
+        hover(node, `${g.k} (${g.sub}, n=${g.n}) · ${s.nm}: ${v.toFixed(1)}% success`);
+        svg.appendChild(node);
+      });
+      const lb = el("text",{x:cx, y:H-B+22, "text-anchor":"middle", fill:"var(--ink)",
+        "font-size":"12.5", "font-weight":"600", "font-family":"IBM Plex Sans, sans-serif"});
+      lb.textContent = g.k; svg.appendChild(lb);
+      const sb = el("text",{x:cx, y:H-B+38, "text-anchor":"middle", fill:"var(--muted)",
+        "font-size":"10.5", "font-family":"IBM Plex Mono, monospace"});
+      sb.textContent = `${g.sub} · n=${g.n}`; svg.appendChild(sb);
+    });
+    host.appendChild(svg);
+    const note = document.createElement("p");
+    note.className = "ch-note";
+    note.textContent = "success rate, % of scenarios in each density band";
+    host.appendChild(note);
+  })();
+
+  /* ---------- replay clips: start once, then leave them alone ----------
+     They previously paused and resumed as the grid crossed the viewport edge, which read as
+     flicker. Now a clip starts the first time it is visible and simply keeps looping. ---------- */
+  (function(){
+    const vids = document.querySelectorAll("video[data-auto]");
+    if (!vids.length) return;
+    if (reduce){ vids.forEach(v => { v.controls = true; }); return; }
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        const v = e.target;
+        io.unobserve(v);
+        const pr = v.play();
+        if (pr && pr.catch) pr.catch(() => { v.controls = true; });
+      });
+    }, {threshold:.15, rootMargin:"200px 0px"});
+    vids.forEach(v => {
+      v.addEventListener("click", () => { v.paused ? v.play() : v.pause(); });
+      v.style.cursor = "pointer";
+      io.observe(v);
+    });
+  })();
+
+  /* ---------- nav highlight ---------- */
+  (function(){
+    const links = [...document.querySelectorAll(".nav a[href^='#']")];
+    const map = new Map();
+    links.forEach(a => { const s = document.querySelector(a.getAttribute("href")); if (s) map.set(s, a); });
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        const a = map.get(e.target); if (!a) return;
+        if (e.isIntersecting) { links.forEach(l => l.classList.remove("on")); a.classList.add("on"); }
+      });
+    }, {rootMargin:"-45% 0px -50% 0px"});
+    map.forEach((a, s) => io.observe(s));
+  })();
+})();
+</script>
+
+</body>
+</html>
